@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hufflepuff Chat Room</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <header>
+            <h1>Hufflepuff Chat Room</h1>
+            <nav>
+                <a href="profile.html" id="profileLink">Profile</a>
+                <button id="logoutBtn">Logout</button>
+            </nav>
+        </header>
+        
+        <div id="messages" class="messages"></div>
+        
+        <form id="messageForm" class="message-form">
+            <input type="file" id="imageInput" accept="image/jpeg,image/jpg,image/png,image/gif" style="display: none;">
+            <div class="image-upload">
+                <button type="button" id="addImageBtn" class="add-image-btn">+</button>
+                <span id="selectedImageName" class="placeholder">Select an image</span>
+            </div>
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/chat.js"></script>
+    <script>
+        // Request notification permission when page loads
+        if ('Notification' in window) {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html> 
