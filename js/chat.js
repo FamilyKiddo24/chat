@@ -7,13 +7,12 @@ const imageInput = document.getElementById('imageInput');
 const addImageBtn = document.getElementById('addImageBtn');
 const selectedImageName = document.getElementById('selectedImageName');
 const messageInput = document.getElementById('messageInput');
-const notificationSound = new Audio('sounds/message.mp3');
 let notificationPermission = false;
 
 // Add this function to request notification permission
 async function requestNotificationPermission() {
     try {
-        const permission = await Notification.requestPermission();
+        const permission = await Notification.rRemequestPermission();
         notificationPermission = permission === 'granted';
     } catch (error) {
         console.error('Error requesting notification permission:', error);
@@ -25,12 +24,7 @@ function showNotification(username, message) {
     if (notificationPermission && document.hidden) {
         const notification = new Notification(username, {
             body: message,
-            icon: '/favicon.ico' // Add a favicon.ico to your project root if you want an icon
-        });
-
-        // Play sound
-        notificationSound.play().catch(error => {
-            console.error('Error playing sound:', error);
+            icon: '/favicon.ico'
         });
 
         // Auto close notification after 4 seconds
