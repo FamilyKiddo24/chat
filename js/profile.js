@@ -55,6 +55,11 @@ updateProfileForm.addEventListener('submit', async (e) => {
         alert('Username cannot be empty');
         return;
     }
+
+    if (newUsername.length < 3) {
+        alert('Username must be at least 3 characters long');
+        return;
+    }
     
     try {
         // Update user document

@@ -1,11 +1,11 @@
 :root {
-    --hufflepuff-yellow: #FFD700;
-    --hufflepuff-black: #000000;
-    --background-color: #1a1a1a;
+    --hufflepuff-yellow: #39ace7;
+    --hufflepuff-black: #ffffff;
+    --background-color: #ffffff;
     --text-color: #ffffff;
     --message-bg: #2d2d2d;
-    --own-message-bg: #FFD700;
-    --own-message-text: #000000;
+    --own-message-bg: #39ace7;
+    --own-message-text: #ffffff;
 }
 
 * {
@@ -76,7 +76,7 @@ button {
 }
 
 button:hover {
-    background-color: #FFE44D;
+    background-color: #0784b5;
 }
 
 .chat-container {

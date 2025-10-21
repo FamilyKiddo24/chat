@@ -115,7 +115,12 @@ messageForm.addEventListener('submit', async (e) => {
         alert('Please enter a message or select an image');
         return;
     }
-    
+
+    if (text.length > 500) {
+        alert('Message must be less than 500 characters');
+        return;
+    }
+
     try {
         const userDoc = await db.collection('users').doc(auth.currentUser.uid).get();
         const userData = userDoc.data();
