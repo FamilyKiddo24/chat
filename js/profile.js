@@ -62,9 +62,37 @@ updateProfileForm.addEventListener('submit', async (e) => {
     }
     
     try {
-        // Update user document
+        // Check for username conflicts (exact match)
+        const usersWithSameName = await db.collection('users')
+            .where('username', '==', newUsername)
+            .get();
+
+        if (!usersWithSameName.empty) {
+            // If any found and it's not the current user -> conflict
+            const conflict = usersWithSameName.docs.some(doc => doc.id !== auth.currentUser.uid);
+            if (conflict) {
+                alert('Username is already taken. Please choose a different one.');
+                return;
+            }
+        }
+
+        // Optional: check case-insensitive conflict if you store usernameLower field
+        const newUsernameLower = newUsername.toLowerCase();
+        const usersWithSameLower = await db.collection('users')
+            .where('usernameLower', '==', newUsernameLower)
+            .get();
+        if (!usersWithSameLower.empty) {
+            const conflictLower = usersWithSameLower.docs.some(doc => doc.id !== auth.currentUser.uid);
+            if (conflictLower) {
+                alert('Username is already taken (case-insensitive). Please choose a different one.');
+                return;
+            }
+        }
+        
+        // Update user document (also update usernameLower for future checks)
         await db.collection('users').doc(auth.currentUser.uid).update({
             username: newUsername,
+            usernameLower: newUsername.toLowerCase(),
             profilePicture: newUsername.charAt(0).toUpperCase()
         });
         
@@ -99,4 +127,4 @@ auth.onAuthStateChanged((user) => {
     } else {
         window.location.href = 'index.html';
     }
-}); 
+});

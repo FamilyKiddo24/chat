@@ -40,9 +40,18 @@ addImageBtn.addEventListener('click', () => {
 
 // Add this function to compress the image
 function compressImage(file) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
+
+        reader.onerror = (err) => reject(err);
+
+        // If GIF, preserve original data URL to keep animation
+        if (file.type === 'image/gif') {
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+            return;
+        }
+
         reader.onload = (e) => {
             const img = new Image();
             img.src = e.target.result;
@@ -50,7 +59,7 @@ function compressImage(file) {
                 const canvas = document.createElement('canvas');
                 let width = img.width;
                 let height = img.height;
-                
+
                 // Calculate new dimensions while maintaining aspect ratio
                 if (width > height) {
                     if (width > 800) {
@@ -63,16 +72,25 @@ function compressImage(file) {
                         height = 800;
                     }
                 }
-                
+
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, width, height);
-                
+
                 // Compress to JPEG with 0.7 quality
-                resolve(canvas.toDataURL('image/jpeg', 0.7));
+                try {
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    resolve(dataUrl);
+                } catch (err) {
+                    // Fallback: return original if canvas fails
+                    resolve(e.target.result);
+                }
             };
+            img.onerror = (err) => reject(err);
         };
+
+        reader.readAsDataURL(file);
     });
 }
 
