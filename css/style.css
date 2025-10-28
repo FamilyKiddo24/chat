@@ -88,6 +88,33 @@ button:hover {
     flex-direction: column;
 }
 
+.admin-controls {
+    display: none; /* hidden by default; shown when .visible is added */
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.25rem;
+}
+.admin-controls.visible {
+    display: flex;
+}
+
+/* Make admin control spans behave like real buttons: no text selection, pointer cursor, and visible focus */
+.admin-controls span,
+.delete-message {
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+/Edge */
+    user-select: none;
+    cursor: pointer;
+}
+
+.admin-controls span:focus,
+.delete-message:focus {
+    outline: 2px solid var(--hufflepuff-yellow);
+    outline-offset: 2px;
+
+}
+
 .messages {
     flex-grow: 1;
     overflow-y: auto;
@@ -253,6 +280,8 @@ nav {
     flex-direction: column;
     gap: 0.3rem;
 }
+
+/* muted-badge removed */
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {

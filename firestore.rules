@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users collection
+    match /users/{userId} {
+      // Allow signed-in users to read user docs
+      allow read: if request.auth != null;
+
+      // Allow users to create their own profile
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // Allow users to update their own profile, or allow any admin to update user docs
+      // To add a new admin, add their UID to the list below (keep in sync with ADMIN_UIDS in chat.js)
+      allow update: if request.auth != null && (
+        request.auth.uid == userId
+        || request.auth.uid in [
+          'p01RisIcRYX8avIDrCisaRT1bSC2', // Example admin
+          // 'r7O5Blm2hqQSNPeFfRuoIzd7yDJ2', // Add more admin UIDs here
+        ]
+      );
+
+      // Allow only admins to delete user docs
+      allow delete: if request.auth != null && request.auth.uid in [
+        'p01RisIcRYX8avIDrCisaRT1bSC2', // Example admin
+        // 'r7O5Blm2hqQSNPeFfRuoIzd7yDJ2', // Add more admin UIDs here
+      ];
+    }
+
+    // Messages collection
+    match /messages/{messageId} {
+      // Signed-in users can read messages
+      allow read: if request.auth != null;
+
+      // Users can create messages as themselves (userId must match)
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+
+      // Allow message updates/deletes by owner or admin
+      // To add a new admin, add their UID to the list below (keep in sync with ADMIN_UIDS in chat.js)
+      allow update, delete: if request.auth != null && (
+        request.auth.uid == resource.data.userId
+        || request.auth.uid in [
+          'p01RisIcRYX8avIDrCisaRT1bSC2', // Example admin
+          // 'r7O5Blm2hqQSNPeFfRuoIzd7yDJ2', // Add more admin UIDs here
+        ]
+      );
+    }
+
+    // Fallback: deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

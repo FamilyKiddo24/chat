@@ -8,11 +8,139 @@ const addImageBtn = document.getElementById('addImageBtn');
 const selectedImageName = document.getElementById('selectedImageName');
 const messageInput = document.getElementById('messageInput');
 let notificationPermission = false;
+// Admin user ids (add more UIDs to this array to grant admin rights)
+const ADMIN_UIDS = [
+    'p01RisIcRYX8avIDrCisaRT1bSC2',
+    'r7O5Blm2hqQSNPeFfRuoIzd7yDJ2'
+];
+
+function isAdmin(uid) {
+    return ADMIN_UIDS.includes(uid);
+}
+let muteUnsubscribe = null;
+let muteInterval = null;
+let muteBanner = null;
+
+function getMillisFromTimestamp(ts) {
+    if (!ts) return null;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (ts.seconds) return ts.seconds * 1000;
+    if (typeof ts === 'number') return ts;
+    if (ts instanceof Date) return ts.getTime();
+    return null;
+}
+
+function formatRemaining(ms) {
+    if (ms <= 0) return '0s';
+    const totalSeconds = Math.ceil(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+}
+
+function enableInputs(enabled) {
+    try {
+        messageInput.disabled = !enabled;
+        imageInput.disabled = !enabled;
+        addImageBtn.disabled = !enabled;
+        const submitBtn = messageForm.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = !enabled;
+    } catch (e) {
+        console.warn('Error toggling inputs', e);
+    }
+}
+
+function showMuteBanner(remainingMs) {
+    if (!muteBanner) {
+        muteBanner = document.createElement('div');
+        muteBanner.id = 'muteBanner';
+        muteBanner.style.background = 'rgba(255,69,0,0.12)';
+        muteBanner.style.color = 'var(--hufflepuff-yellow)';
+        muteBanner.style.padding = '8px 12px';
+        muteBanner.style.border = '1px solid rgba(255,69,0,0.2)';
+        muteBanner.style.borderRadius = '6px';
+        muteBanner.style.marginBottom = '8px';
+        muteBanner.style.fontSize = '0.95rem';
+        const container = document.querySelector('.chat-container') || document.body;
+        container.insertBefore(muteBanner, container.firstChild);
+    }
+    muteBanner.textContent = `You are muted for ${formatRemaining(remainingMs)}.`;
+}
+
+function removeMuteBanner() {
+    if (muteBanner && muteBanner.parentNode) {
+        muteBanner.parentNode.removeChild(muteBanner);
+        muteBanner = null;
+    }
+}
+
+function updateMuteUI(mutedUntil) {
+    // Clear any existing interval
+    if (muteInterval) {
+        clearInterval(muteInterval);
+        muteInterval = null;
+    }
+
+    const ms = getMillisFromTimestamp(mutedUntil);
+    if (ms && ms > Date.now()) {
+        // User is muted
+        enableInputs(false);
+        const remaining = ms - Date.now();
+        showMuteBanner(remaining);
+
+        // Update countdown every second
+        muteInterval = setInterval(() => {
+            const now = Date.now();
+            const rem = ms - now;
+            if (rem <= 0) {
+                clearInterval(muteInterval);
+                muteInterval = null;
+                enableInputs(true);
+                removeMuteBanner();
+            } else {
+                showMuteBanner(rem);
+            }
+        }, 1000);
+    } else {
+        // Not muted
+        enableInputs(true);
+        removeMuteBanner();
+    }
+}
+
+function setupMuteListener() {
+    // Clean up previous listener
+    if (muteUnsubscribe) {
+        muteUnsubscribe();
+        muteUnsubscribe = null;
+    }
+    if (!auth.currentUser) return;
+    const ref = db.collection('users').doc(auth.currentUser.uid);
+    muteUnsubscribe = ref.onSnapshot(doc => {
+        const data = doc.exists ? doc.data() : {};
+        updateMuteUI(data.mutedUntil);
+    }, err => {
+        console.error('Mute listener error', err);
+    });
+}
+
+function cleanupMuteListener() {
+    if (muteUnsubscribe) {
+        muteUnsubscribe();
+        muteUnsubscribe = null;
+    }
+    if (muteInterval) {
+        clearInterval(muteInterval);
+        muteInterval = null;
+    }
+    removeMuteBanner();
+}
 
 // Add this function to request notification permission
 async function requestNotificationPermission() {
     try {
-        const permission = await Notification.rRemequestPermission();
+        const permission = await Notification.requestPermission();
         notificationPermission = permission === 'granted';
     } catch (error) {
         console.error('Error requesting notification permission:', error);
@@ -146,6 +274,13 @@ messageForm.addEventListener('submit', async (e) => {
         if (!userData) {
             throw new Error('User data not found');
         }
+        // Check if user is muted
+        if (userData.mutedUntil && userData.mutedUntil.toMillis && userData.mutedUntil.toMillis() > Date.now()) {
+            const remainingMs = userData.mutedUntil.toMillis() - Date.now();
+            const remainingSeconds = Math.ceil(remainingMs / 1000);
+            alert(`You are muted for another ${remainingSeconds} second(s). You cannot send messages right now.`);
+            return;
+        }
         
         let image = null;
         if (imageFile) {
@@ -169,7 +304,7 @@ messageForm.addEventListener('submit', async (e) => {
         selectedImageName.textContent = 'Select an image';
     } catch (error) {
         console.error('Error sending message:', error);
-        alert('Error sending message. Please try again.');
+        alert('Error sending message. Please try again. If using an image make sure it is smaller than 1MB.');
     }
 });
 
@@ -182,6 +317,7 @@ function loadMessages() {
         .limit(100)
         .onSnapshot((snapshot) => {
             messagesDiv.innerHTML = '';
+            const currentUid = auth.currentUser ? auth.currentUser.uid : null;
             
             // Check for new messages
             if (!isFirstLoad) {
@@ -219,9 +355,14 @@ function loadMessages() {
                 const imageContent = message.image 
                     ? `<img src="${message.image}" alt="Shared image" loading="lazy">` 
                     : '';
-                
+
+                // Determine if current user can delete (own message or admin)
+                const canDelete = message.userId === currentUid || isAdmin(currentUid);
+
+                // Owner delete button remains visible. Admin-only controls are placed in a hidden container
+                // that will be shown when the message element receives focus or hover.
                 const messageHTML = `
-                    ${message.userId === auth.currentUser.uid ? '<span class="delete-message" data-id="' + doc.id + '">×</span>' : ''}
+                    ${canDelete ? '<span class="delete-message" data-id="' + doc.id + '">×</span>' : ''}
                     ${profilePic}
                     <div class="message-content">
                         <strong>${message.username || 'Unknown User'}</strong>
@@ -229,10 +370,61 @@ function loadMessages() {
                         ${message.text ? `<p>${message.text}</p>` : ''}
                         ${timestampHTML}
                     </div>
+                    ${isAdmin(currentUid) ? '<div class="admin-controls">' +
+                        '<span class="admin-delete" data-id="' + doc.id + '">🗑</span>' +
+                        '<span class="change-username" data-userid="' + message.userId + '">✎</span>' +
+                        '<span class="mute-user" data-userid="' + message.userId + '">🔇</span>' +
+                        '</div>' : ''}
                 `;
-                
+
                 messageElement.innerHTML = messageHTML;
+                // Make each message focusable so keyboard users can focus it to reveal admin controls
+                messageElement.tabIndex = 0;
                 messagesDiv.appendChild(messageElement);
+
+                // If current user is admin, wire focus/hover to show/hide admin controls
+                if (isAdmin(currentUid)) {
+                    const adminControls = messageElement.querySelector('.admin-controls');
+                    if (adminControls) {
+                        const show = () => adminControls.classList.add('visible');
+                        const hide = () => adminControls.classList.remove('visible');
+
+                        // Show on focus or hover, hide on blur or mouse leave
+                        messageElement.addEventListener('focus', show);
+                        messageElement.addEventListener('blur', hide);
+                        messageElement.addEventListener('mouseenter', show);
+                        messageElement.addEventListener('mouseleave', hide);
+
+                        // Make the control buttons keyboard-focusable
+                        adminControls.querySelectorAll('span').forEach(s => s.tabIndex = 0);
+
+                        // Update mute button label based on user's current muted state
+                        const muteBtn = adminControls.querySelector('.mute-user');
+                        if (muteBtn) {
+                            (async () => {
+                                try {
+                                    const ud = await db.collection('users').doc(message.userId).get();
+                                    if (!ud.exists) return;
+                                    const udata = ud.data();
+                                    const mutedMs = getMillisFromTimestamp(udata && udata.mutedUntil);
+                                    if (mutedMs && mutedMs > Date.now()) {
+                                        // currently muted -> show unmute icon
+                                        muteBtn.textContent = '🔊';
+                                        muteBtn.title = 'Unmute user';
+                                        muteBtn.dataset.muted = '1';
+                                    } else {
+                                        // not muted -> show mute icon
+                                        muteBtn.textContent = '🔇';
+                                        muteBtn.title = 'Mute user for 10 minutes';
+                                        delete muteBtn.dataset.muted;
+                                    }
+                                } catch (err) {
+                                    console.error('Error getting user mute state', err);
+                                }
+                            })();
+                        }
+                    }
+                }
             });
             
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -242,6 +434,7 @@ function loadMessages() {
 
 // Delete message
 messagesDiv.addEventListener('click', async (e) => {
+    // Delete message (allowed for own messages or admin - UI controls determine visibility)
     if (e.target.classList.contains('delete-message')) {
         try {
             const messageId = e.target.dataset.id;
@@ -250,6 +443,98 @@ messagesDiv.addEventListener('click', async (e) => {
             console.error('Error deleting message:', error);
             alert('Error deleting message. Please try again.');
         }
+        return;
+    }
+
+    // Change username (admin only)
+    if (e.target.classList.contains('change-username')) {
+        const targetUid = e.target.dataset.userid;
+        const newName = prompt('Enter new username (min 3 characters):');
+        if (!newName) return;
+        if (newName.trim().length < 3) {
+            alert('Username must be at least 3 characters long');
+            return;
+        }
+
+        try {
+            // Check uniqueness (exclude the target user's current username)
+            const usersRef = db.collection('users');
+            const existing = await usersRef.where('username', '==', newName.trim()).get();
+            if (!existing.empty) {
+                // If only one exists and it's the same user, it's okay
+                const isSameUser = existing.docs.length === 1 && existing.docs[0].id === targetUid;
+                if (!isSameUser) {
+                    alert('Username already taken');
+                    return;
+                }
+            }
+
+            // Update user's username
+            await usersRef.doc(targetUid).update({ username: newName.trim() });
+
+            // Update existing messages authored by that user to reflect new username
+            const messagesRef = db.collection('messages').where('userId', '==', targetUid);
+            const messagesSnap = await messagesRef.get();
+            if (!messagesSnap.empty) {
+                const batch = db.batch();
+                messagesSnap.docs.forEach(d => batch.update(d.ref, { username: newName.trim() }));
+                await batch.commit();
+            }
+
+            alert('Username updated successfully');
+        } catch (err) {
+            console.error('Error changing username:', err);
+            alert('Failed to change username. See console for details.');
+        }
+        return;
+    }
+
+    // Toggle mute/unmute for user (admin only)
+    if (e.target.classList.contains('mute-user')) {
+        const targetUid = e.target.dataset.userid;
+        try {
+            // Read current state to determine action
+            const ud = await db.collection('users').doc(targetUid).get();
+            const udata = ud.exists ? ud.data() : {};
+            const mutedMs = getMillisFromTimestamp(udata && udata.mutedUntil);
+            if (mutedMs && mutedMs > Date.now()) {
+                // Currently muted -> unmute (remove field)
+                await db.collection('users').doc(targetUid).update({ mutedUntil: firebase.firestore.FieldValue.delete() });
+                alert('User unmuted');
+                // update button UI if still in DOM
+                e.target.textContent = '🔇';
+                delete e.target.dataset.muted;
+            } else {
+                // Not muted -> mute for 10 minutes
+                const muteUntil = firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 10 * 60 * 1000));
+                await db.collection('users').doc(targetUid).update({ mutedUntil: muteUntil });
+                alert('User muted for 10 minutes');
+                e.target.textContent = '🔊';
+                e.target.dataset.muted = '1';
+            }
+        } catch (err) {
+            console.error('Error toggling mute for user:', err);
+            alert('Failed to toggle mute. See console for details.');
+        }
+        return;
+    }
+
+    // Admin delete via admin-controls (delete current message)
+    if (e.target.classList.contains('admin-delete')) {
+        const messageId = e.target.dataset.id;
+        const messageElem = e.target.closest('.message');
+
+        try {
+            await db.collection('messages').doc(messageId).delete();
+            // Remove from DOM for immediate feedback if present
+            if (messageElem && messageElem.parentNode) {
+                messageElem.parentNode.removeChild(messageElem);
+            }
+        } catch (error) {
+            console.error('Error deleting message via admin control:', error);
+            alert('Error deleting message. Please try again.');
+        }
+        return;
     }
 });
 
@@ -260,6 +545,15 @@ logoutBtn.addEventListener('click', () => {
 
 // Load messages when page loads
 loadMessages();
+
+// Setup mute listener when auth state changes
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        setupMuteListener();
+    } else {
+        cleanupMuteListener();
+    }
+});
 
 // Add this to your initialization code
 document.addEventListener('DOMContentLoaded', async () => {
